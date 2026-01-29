@@ -7,6 +7,7 @@
 set -e
 
 INSTALL_DIR="$HOME/granola-export"
+APP_DIR="$HOME/Applications"
 LAUNCH_AGENT_DIR="$HOME/Library/LaunchAgents"
 LAUNCH_AGENT_FILE="com.granola.export.plist"
 GRANOLA_CACHE="$HOME/Library/Application Support/Granola/cache-v3.json"
@@ -98,8 +99,17 @@ on run
 end run
 APPLESCRIPT
 
-osacompile -o "$INSTALL_DIR/GranolaExport.app" /tmp/granola_app.applescript
+# Create ~/Applications if it doesn't exist (for Launchpad visibility)
+mkdir -p "$APP_DIR"
+osacompile -o "$APP_DIR/Granola Export.app" /tmp/granola_app.applescript
 rm /tmp/granola_app.applescript
+
+# Add custom icon
+if [ -f "$SCRIPT_DIR/AppIcon.icns" ]; then
+    cp "$SCRIPT_DIR/AppIcon.icns" "$APP_DIR/Granola Export.app/Contents/Resources/applet.icns"
+    # Touch the app to refresh icon cache
+    touch "$APP_DIR/Granola Export.app"
+fi
 
 # Create LaunchAgent for automatic exports
 echo "⚡ Setting up automatic export on meeting end..."
@@ -148,7 +158,7 @@ echo "📝 Log file: $INSTALL_DIR/export.log"
 echo ""
 echo "🔄 Automatic export: Enabled (triggers when Granola cache updates)"
 echo ""
-echo "📌 Optional: Drag GranolaExport.app to your Dock for manual exports"
-echo "   Location: $INSTALL_DIR/GranolaExport.app"
+echo "📌 App installed: $APP_DIR/Granola Export.app"
+echo "   (Available in Launchpad and Spotlight)"
 echo ""
 echo "To uninstall, run: ./uninstall.sh"

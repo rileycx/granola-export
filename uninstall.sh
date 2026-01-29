@@ -5,6 +5,7 @@
 #
 
 INSTALL_DIR="$HOME/granola-export"
+APP_DIR="$HOME/Applications"
 LAUNCH_AGENT_DIR="$HOME/Library/LaunchAgents"
 LAUNCH_AGENT_FILE="com.granola.export.plist"
 
@@ -27,7 +28,7 @@ rm -f "$LAUNCH_AGENT_DIR/$LAUNCH_AGENT_FILE"
 
 # Remove app
 echo "🗑️  Removing app..."
-rm -rf "$INSTALL_DIR/GranolaExport.app"
+rm -rf "$APP_DIR/Granola Export.app"
 rm -f "$INSTALL_DIR/export_granola.py"
 rm -f "$INSTALL_DIR/export.log"
 
