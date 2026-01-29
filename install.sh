@@ -33,11 +33,20 @@ fi
 echo "📁 Creating install directory..."
 mkdir -p "$INSTALL_DIR/meetings"
 
-# Copy export script
+# Copy export script (skip if already in install dir)
 echo "📄 Installing export script..."
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-cp "$SCRIPT_DIR/export_granola.py" "$INSTALL_DIR/"
+if [ "$SCRIPT_DIR" != "$INSTALL_DIR" ]; then
+    cp "$SCRIPT_DIR/export_granola.py" "$INSTALL_DIR/"
+fi
 chmod +x "$INSTALL_DIR/export_granola.py"
+
+# Create wrapper script (shows as "granola-export" in Activity Monitor)
+cat > "$INSTALL_DIR/granola-export" << 'WRAPPER'
+#!/bin/bash
+exec /usr/bin/python3 "$(dirname "$0")/export_granola.py" "$@"
+WRAPPER
+chmod +x "$INSTALL_DIR/granola-export"
 
 # Create the macOS app for manual exports
 echo "🖱️  Creating menu bar app..."
@@ -137,7 +146,7 @@ rm /tmp/granola_app.applescript
 
 # Add custom icon
 if [ -f "$SCRIPT_DIR/AppIcon.icns" ]; then
-    cp "$SCRIPT_DIR/AppIcon.icns" "$APP_DIR/Granola Export.app/Contents/Resources/applet.icns"
+    cp "$SCRIPT_DIR/AppIcon.icns" "$APP_DIR/Granola Export.app/Contents/Resources/applet.icns" 2>/dev/null || true
     # Touch the app to refresh icon cache
     touch "$APP_DIR/Granola Export.app"
 fi
@@ -155,8 +164,7 @@ cat > "$LAUNCH_AGENT_DIR/$LAUNCH_AGENT_FILE" << EOF
     <string>com.granola.export</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/bin/python3</string>
-        <string>$INSTALL_DIR/export_granola.py</string>
+        <string>$INSTALL_DIR/granola-export</string>
     </array>
     <key>WatchPaths</key>
     <array>
