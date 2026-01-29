@@ -180,6 +180,112 @@ launchctl load "$LAUNCH_AGENT_DIR/$LAUNCH_AGENT_FILE"
 echo "🚀 Running initial export..."
 python3 "$INSTALL_DIR/export_granola.py"
 
+# Cloud sync setup
+echo ""
+echo "☁️  Cloud Sync Setup (optional)"
+echo "   Sync exports to GitHub or run a custom command after each export."
+echo ""
+read -p "Enable cloud sync? (y/n) " -n 1 -r
+echo ""
+
+CONFIG_FILE="$HOME/.granola-export-config.json"
+
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    echo ""
+    echo "Sync methods:"
+    echo "  1) GitHub - push to a private repo"
+    echo "  2) Custom command - run your own sync command (rsync, s3, etc.)"
+    echo ""
+    read -p "Choose sync method (1 or 2): " -n 1 -r SYNC_METHOD
+    echo ""
+
+    if [[ $SYNC_METHOD == "1" ]]; then
+        echo ""
+        echo "GitHub Sync Setup"
+        echo "-----------------"
+        echo "You'll need a GitHub repo to push to."
+        echo "Create one at: https://github.com/new (make it private!)"
+        echo ""
+        read -p "GitHub repo (e.g., username/granola-transcripts): " GITHUB_REPO
+        read -p "Branch name (default: main): " GITHUB_BRANCH
+        GITHUB_BRANCH=${GITHUB_BRANCH:-main}
+
+        # Create config file
+        cat > "$CONFIG_FILE" << CONFIGEOF
+{
+  "sync_enabled": true,
+  "sync_method": "github",
+  "github_repo": "$GITHUB_REPO",
+  "github_branch": "$GITHUB_BRANCH"
+}
+CONFIGEOF
+
+        # Initialize git repo in export directory
+        echo ""
+        echo "Initializing git repo..."
+        cd "$INSTALL_DIR"
+        if [ ! -d ".git" ]; then
+            git init
+            git branch -M "$GITHUB_BRANCH"
+        fi
+
+        # Check if remote exists
+        if ! git remote get-url origin &>/dev/null; then
+            git remote add origin "git@github.com:$GITHUB_REPO.git"
+        fi
+
+        # Create .gitignore for export dir
+        cat > "$INSTALL_DIR/.gitignore" << GITIGNOREEOF
+export.log
+*.pyc
+__pycache__/
+.DS_Store
+GITIGNOREEOF
+
+        echo ""
+        echo "✅ GitHub sync configured!"
+        echo "   Repo: $GITHUB_REPO"
+        echo "   Branch: $GITHUB_BRANCH"
+        echo ""
+        echo "⚠️  Make sure you've added your SSH key to GitHub."
+        echo "   Test with: cd ~/granola-export && git push -u origin $GITHUB_BRANCH"
+
+    elif [[ $SYNC_METHOD == "2" ]]; then
+        echo ""
+        echo "Custom Command Setup"
+        echo "--------------------"
+        echo "Enter a shell command to run after each export."
+        echo "The command runs from ~/granola-export/"
+        echo ""
+        echo "Examples:"
+        echo "  rsync -av meetings/ user@server:/backups/granola/"
+        echo "  aws s3 sync meetings/ s3://my-bucket/granola/"
+        echo ""
+        read -p "Sync command: " SYNC_COMMAND
+
+        # Create config file
+        cat > "$CONFIG_FILE" << CONFIGEOF
+{
+  "sync_enabled": true,
+  "sync_method": "command",
+  "sync_command": "$SYNC_COMMAND"
+}
+CONFIGEOF
+
+        echo ""
+        echo "✅ Custom sync configured!"
+        echo "   Command: $SYNC_COMMAND"
+    fi
+else
+    # Create disabled config
+    cat > "$CONFIG_FILE" << CONFIGEOF
+{
+  "sync_enabled": false
+}
+CONFIGEOF
+    echo "   Sync disabled. Edit ~/.granola-export-config.json to enable later."
+fi
+
 echo ""
 echo "✅ Installation complete!"
 echo ""

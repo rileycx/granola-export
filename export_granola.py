@@ -11,6 +11,7 @@ https://github.com/rileycx/granola-export
 import json
 import os
 import re
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -21,6 +22,8 @@ CACHE_PATH = os.path.join(HOME, "Library/Application Support/Granola/cache-v3.js
 EXPORT_DIR = os.path.join(HOME, "granola-export")
 MEETINGS_DIR = os.path.join(EXPORT_DIR, "meetings")
 INDEX_PATH = os.path.join(EXPORT_DIR, "index.json")
+CONFIG_PATH = os.path.join(HOME, ".granola-export-config.json")
+LOG_PATH = os.path.join(EXPORT_DIR, "export.log")
 
 
 def slugify(text: str, max_length: int = 50) -> str:
@@ -75,6 +78,141 @@ def extract_people(doc: dict) -> list:
     if isinstance(people, list):
         return [p.get("name", p.get("email", "Unknown")) if isinstance(p, dict) else str(p) for p in people]
     return []
+
+
+def log_message(message: str):
+    """Append a message to the export log."""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        with open(LOG_PATH, 'a') as f:
+            f.write(f"[{timestamp}] {message}\n")
+    except:
+        pass
+
+
+def load_config() -> dict:
+    """Load sync configuration from config file."""
+    if not os.path.exists(CONFIG_PATH):
+        return {}
+    try:
+        with open(CONFIG_PATH, 'r') as f:
+            return json.load(f)
+    except (json.JSONDecodeError, IOError):
+        return {}
+
+
+def sync_github(config: dict) -> bool:
+    """Sync exports to GitHub repository."""
+    repo = config.get("github_repo", "")
+    branch = config.get("github_branch", "main")
+
+    if not repo:
+        log_message("SYNC WARNING: github_repo not configured")
+        return False
+
+    try:
+        # Check if git repo is initialized
+        git_dir = os.path.join(EXPORT_DIR, ".git")
+        if not os.path.exists(git_dir):
+            log_message("SYNC WARNING: Git not initialized in export dir. Run: cd ~/granola-export && git init && git remote add origin <repo-url>")
+            return False
+
+        # Stage all changes
+        subprocess.run(
+            ["git", "add", "-A"],
+            cwd=EXPORT_DIR,
+            capture_output=True,
+            check=True
+        )
+
+        # Check if there are changes to commit
+        result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=EXPORT_DIR,
+            capture_output=True,
+            text=True
+        )
+
+        if not result.stdout.strip():
+            log_message("SYNC: No changes to push")
+            return True
+
+        # Commit changes
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        subprocess.run(
+            ["git", "commit", "-m", f"Auto-sync: {timestamp}"],
+            cwd=EXPORT_DIR,
+            capture_output=True,
+            check=True
+        )
+
+        # Push to remote
+        subprocess.run(
+            ["git", "push", "origin", branch],
+            cwd=EXPORT_DIR,
+            capture_output=True,
+            check=True
+        )
+
+        log_message(f"SYNC: Pushed to GitHub ({repo})")
+        return True
+
+    except subprocess.CalledProcessError as e:
+        log_message(f"SYNC ERROR (github): {e.stderr.decode() if e.stderr else str(e)}")
+        return False
+    except Exception as e:
+        log_message(f"SYNC ERROR (github): {str(e)}")
+        return False
+
+
+def sync_command(config: dict) -> bool:
+    """Run custom sync command."""
+    command = config.get("sync_command", "")
+
+    if not command:
+        log_message("SYNC WARNING: sync_command not configured")
+        return False
+
+    try:
+        result = subprocess.run(
+            command,
+            shell=True,
+            cwd=EXPORT_DIR,
+            capture_output=True,
+            text=True
+        )
+
+        if result.returncode == 0:
+            log_message(f"SYNC: Custom command succeeded")
+            return True
+        else:
+            log_message(f"SYNC ERROR (command): {result.stderr}")
+            return False
+
+    except Exception as e:
+        log_message(f"SYNC ERROR (command): {str(e)}")
+        return False
+
+
+def run_sync(new_count: int):
+    """Run sync if enabled and there are new exports."""
+    config = load_config()
+
+    if not config.get("sync_enabled", False):
+        return
+
+    if new_count == 0:
+        log_message("SYNC: Skipped (no new exports)")
+        return
+
+    sync_method = config.get("sync_method", "")
+
+    if sync_method == "github":
+        sync_github(config)
+    elif sync_method == "command":
+        sync_command(config)
+    else:
+        log_message(f"SYNC WARNING: Unknown sync method '{sync_method}'")
 
 
 def main():
@@ -205,6 +343,9 @@ def main():
     print(f"  Already exported: {already_exported}")
     print(f"  No transcript: {skipped_no_transcript}")
     print(f"  Total in index: {len(existing_meetings)}")
+
+    # Run sync if enabled
+    run_sync(new_count)
 
     # Return count for notification scripts
     return new_count

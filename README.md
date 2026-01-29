@@ -9,6 +9,7 @@ Export your [Granola](https://granola.ai) meeting transcripts to local JSON file
 - **AI-optimized format** — JSON structure designed for easy AI/LLM consumption
 - **Searchable index** — Master index file for quick lookups across all meetings
 - **Manual export** — Click the app anytime to export on-demand
+- **Cloud sync** — Optionally push exports to GitHub or custom destination
 
 ## What Gets Exported
 
@@ -89,6 +90,84 @@ The export format is optimized for AI assistants. Example prompts:
 - "Find all action items from January meetings"
 
 Load the `index.json` for quick lookups, or individual meeting files for full transcripts.
+
+## Cloud Sync (Optional)
+
+Automatically sync your exports to a remote destination after each export. Useful for:
+- Backing up transcripts
+- Sharing with AI tools that can access GitHub/cloud storage
+- Syncing across machines
+
+### Setup During Install
+
+The installer will ask if you want to enable cloud sync. You can also configure it manually later.
+
+### GitHub Sync
+
+Push exports to a private GitHub repo:
+
+1. Create a private repo on GitHub (e.g., `my-granola-transcripts`)
+
+2. Edit `~/.granola-export-config.json`:
+```json
+{
+  "sync_enabled": true,
+  "sync_method": "github",
+  "github_repo": "yourusername/my-granola-transcripts",
+  "github_branch": "main"
+}
+```
+
+3. Initialize git in your export folder:
+```bash
+cd ~/granola-export
+git init
+git remote add origin git@github.com:yourusername/my-granola-transcripts.git
+git add -A
+git commit -m "Initial export"
+git push -u origin main
+```
+
+After setup, exports will auto-push to GitHub.
+
+### Custom Command Sync
+
+Run any shell command after each export (rsync, S3, etc.):
+
+```json
+{
+  "sync_enabled": true,
+  "sync_method": "command",
+  "sync_command": "rsync -av meetings/ user@server:/backups/granola/"
+}
+```
+
+**More examples:**
+
+```bash
+# AWS S3
+"sync_command": "aws s3 sync meetings/ s3://my-bucket/granola/"
+
+# rclone (Dropbox, Google Drive, etc.)
+"sync_command": "rclone sync meetings/ dropbox:granola-exports"
+
+# Simple copy to another folder
+"sync_command": "cp -r meetings/ /Volumes/Backup/granola/"
+```
+
+### Disable Sync
+
+Set `sync_enabled` to `false` in the config file:
+
+```json
+{
+  "sync_enabled": false
+}
+```
+
+### Sync Logs
+
+Sync results are logged to `~/granola-export/export.log`.
 
 ## Important Notes
 
