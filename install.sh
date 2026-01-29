@@ -43,59 +43,90 @@ chmod +x "$INSTALL_DIR/export_granola.py"
 echo "🖱️  Creating menu bar app..."
 cat > /tmp/granola_app.applescript << 'APPLESCRIPT'
 on run
-    set exportScript to (POSIX path of (path to home folder)) & "granola-export/export_granola.py"
-    set logFile to (POSIX path of (path to home folder)) & "granola-export/export.log"
+    set homeFolder to POSIX path of (path to home folder)
+    set exportScript to homeFolder & "granola-export/export_granola.py"
+    set exportFolder to homeFolder & "granola-export/meetings"
+    set indexFile to homeFolder & "granola-export/index.json"
 
-    display notification "Starting export..." with title "Granola Export" sound name "Submarine"
-
+    -- Get current meeting count
+    set meetingCount to "0"
     try
-        set output to do shell script "/usr/bin/python3 " & quoted form of exportScript
-
-        -- Log the output with timestamp
-        set timestamp to do shell script "date '+%Y-%m-%d %H:%M:%S'"
-        do shell script "echo '\\n--- " & timestamp & " ---\\n" & output & "' >> " & quoted form of logFile
-
-        -- Parse export count
-        set newCount to "0"
-        if output contains "New:" then
+        set indexContent to do shell script "cat " & quoted form of indexFile
+        if indexContent contains "exported_count" then
             set oldDelims to AppleScript's text item delimiters
-            set AppleScript's text item delimiters to "New: "
-            set parts to text items of output
+            set AppleScript's text item delimiters to "\"exported_count\": "
+            set parts to text items of indexContent
             if (count of parts) > 1 then
-                set afterNew to item 2 of parts
-                set AppleScript's text item delimiters to " meetings"
-                set newCount to text item 1 of afterNew
+                set afterCount to item 2 of parts
+                set AppleScript's text item delimiters to ","
+                set meetingCount to text item 1 of afterCount
             end if
             set AppleScript's text item delimiters to oldDelims
         end if
-
-        -- Parse total count
-        set totalCount to "0"
-        if output contains "Total in index:" then
-            set oldDelims to AppleScript's text item delimiters
-            set AppleScript's text item delimiters to "Total in index: "
-            set parts to text items of output
-            if (count of parts) > 1 then
-                set totalCount to item 2 of parts
-                -- Remove any trailing whitespace/newlines
-                set AppleScript's text item delimiters to {return, linefeed, " "}
-                set totalCount to text item 1 of totalCount
-            end if
-            set AppleScript's text item delimiters to oldDelims
-        end if
-
-        if newCount is "0" then
-            display notification "No new meetings to export. Total: " & totalCount with title "Granola Export" sound name "Pop"
-        else
-            display notification "Exported " & newCount & " new meetings. Total: " & totalCount with title "Granola Export Complete" sound name "Glass"
-        end if
-
-    on error errMsg
-        display notification errMsg with title "Granola Export Failed" sound name "Basso"
-
-        set timestamp to do shell script "date '+%Y-%m-%d %H:%M:%S'"
-        do shell script "echo '\\n--- " & timestamp & " ERROR ---\\n" & errMsg & "' >> " & quoted form of logFile
     end try
+
+    -- Show main dialog
+    set dialogResult to display dialog "Granola Export saves your meeting transcripts locally as JSON files for use with AI tools.
+
+✓ Auto-exports after every Granola meeting
+✓ " & meetingCount & " meetings exported so far
+
+Transcripts are saved to:
+~/granola-export/meetings/" buttons {"Open Folder", "Export Now"} default button "Export Now" with title "Granola Export" with icon note
+
+    if button returned of dialogResult is "Open Folder" then
+        do shell script "open " & quoted form of exportFolder
+    else if button returned of dialogResult is "Export Now" then
+        -- Run export
+        try
+            set output to do shell script "/usr/bin/python3 " & quoted form of exportScript
+
+            -- Parse new count
+            set newCount to "0"
+            if output contains "New:" then
+                set oldDelims to AppleScript's text item delimiters
+                set AppleScript's text item delimiters to "New: "
+                set parts to text items of output
+                if (count of parts) > 1 then
+                    set afterNew to item 2 of parts
+                    set AppleScript's text item delimiters to " meetings"
+                    set newCount to text item 1 of afterNew
+                end if
+                set AppleScript's text item delimiters to oldDelims
+            end if
+
+            -- Parse total count
+            set totalCount to "0"
+            if output contains "Total in index:" then
+                set oldDelims to AppleScript's text item delimiters
+                set AppleScript's text item delimiters to "Total in index: "
+                set parts to text items of output
+                if (count of parts) > 1 then
+                    set totalCount to item 2 of parts
+                    set AppleScript's text item delimiters to {return, linefeed, " ", "}"}
+                    set totalCount to text item 1 of totalCount
+                end if
+                set AppleScript's text item delimiters to oldDelims
+            end if
+
+            if newCount is "0" then
+                display dialog "No new meetings to export.
+
+Total meetings: " & totalCount buttons {"OK", "Open Folder"} default button "OK" with title "Granola Export" with icon note
+            else
+                display dialog "Exported " & newCount & " new meetings!
+
+Total meetings: " & totalCount buttons {"OK", "Open Folder"} default button "Open Folder" with title "Granola Export" with icon note
+            end if
+
+            if button returned of result is "Open Folder" then
+                do shell script "open " & quoted form of exportFolder
+            end if
+
+        on error errMsg
+            display dialog "Export failed: " & errMsg buttons {"OK"} default button "OK" with title "Granola Export" with icon stop
+        end try
+    end if
 end run
 APPLESCRIPT
 
