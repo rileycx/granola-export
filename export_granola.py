@@ -117,6 +117,15 @@ def sync_github(config: dict) -> bool:
             log_message("SYNC WARNING: Git not initialized in export dir. Run: cd ~/granola-export && git init && git remote add origin <repo-url>")
             return False
 
+        # Copy new meeting files from meetings/ to root (repo stores in root)
+        import shutil
+        for filename in os.listdir(MEETINGS_DIR):
+            if filename.endswith('.json'):
+                src = os.path.join(MEETINGS_DIR, filename)
+                dst = os.path.join(EXPORT_DIR, filename)
+                if not os.path.exists(dst):
+                    shutil.copy2(src, dst)
+
         # Stage all changes
         subprocess.run(
             ["git", "add", "-A"],
