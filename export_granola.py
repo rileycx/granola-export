@@ -8,6 +8,7 @@ Only exports new transcripts that haven't been saved before.
 https://github.com/rileycx/granola-export
 """
 
+import argparse
 import json
 import os
 import re
@@ -15,7 +16,7 @@ import subprocess
 import sys
 from datetime import datetime
 
-# Paths (automatically use current user's home directory)
+# Paths (default to current user's home directory)
 HOME = os.path.expanduser("~")
 CACHE_PATH = os.path.join(HOME, "Library/Application Support/Granola/cache-v3.json")
 EXPORT_DIR = os.path.join(HOME, "granola-export")
@@ -263,7 +264,23 @@ def run_sync(new_count: int):
         log_message(f"SYNC WARNING: Unknown sync method '{sync_method}'")
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Export Granola transcripts to JSON.")
+    parser.add_argument("--cache-path", default=CACHE_PATH, help="Path to Granola cache JSON")
+    parser.add_argument("--export-dir", default=EXPORT_DIR, help="Export directory")
+    parser.add_argument("--no-sync", action="store_true", help="Skip sync even if enabled in config")
+    parser.add_argument("--json", action="store_true", help="Print machine-readable summary JSON")
+    return parser.parse_args()
+
+
 def main():
+    global CACHE_PATH, EXPORT_DIR, MEETINGS_DIR, INDEX_PATH, LOG_PATH
+    args = parse_args()
+    CACHE_PATH = args.cache_path
+    EXPORT_DIR = args.export_dir
+    MEETINGS_DIR = os.path.join(EXPORT_DIR, "meetings")
+    INDEX_PATH = os.path.join(EXPORT_DIR, "index.json")
+    LOG_PATH = os.path.join(EXPORT_DIR, "export.log")
     # Check if Granola cache exists
     if not os.path.exists(CACHE_PATH):
         print("Error: Granola cache not found.")
@@ -401,6 +418,15 @@ def main():
     with open(INDEX_PATH, 'w') as f:
         json.dump(index, f, indent=2)
 
+    summary = {
+        "new": new_count,
+        "already_exported": already_exported,
+        "no_transcript": skipped_no_transcript,
+        "total_in_index": len(existing_meetings),
+        "export_dir": EXPORT_DIR,
+        "index_path": INDEX_PATH,
+    }
+
     print(f"\nExport complete!")
     print(f"  New: {new_count} meetings exported")
     print(f"  Already exported: {already_exported}")
@@ -408,9 +434,14 @@ def main():
     print(f"  Total in index: {len(existing_meetings)}")
 
     # Run sync if enabled
-    run_sync(new_count)
+    if not args.no_sync:
+        run_sync(new_count)
+    else:
+        log_message("SYNC: Skipped (--no-sync)")
 
     # Return count for notification scripts
+    if args.json:
+        print(json.dumps(summary))
     return new_count
 
 

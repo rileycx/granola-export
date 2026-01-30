@@ -68,6 +68,17 @@ Double-click `GranolaExport.app` in `~/granola-export/` or add it to your Dock.
 python3 ~/granola-export/export_granola.py
 ```
 
+For terminal-first usage:
+```bash
+# Custom export directory + machine-readable summary
+python3 ~/granola-export/export_granola.py --export-dir ~/granola-export --json
+
+# Use a custom cache path and skip sync
+python3 ~/granola-export/export_granola.py --cache-path "/path/to/cache-v3.json" --no-sync
+```
+
+Run `python3 ~/granola-export/export_granola.py -h` for all options.
+
 ## Export Location
 
 ```
