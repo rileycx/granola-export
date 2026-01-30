@@ -129,6 +129,7 @@ git push -u origin main
 ```
 
 After setup, exports will auto-push to GitHub.
+If the git `origin` remote does not match `github_repo`, sync will be skipped with a warning.
 
 ### Custom Command Sync
 
@@ -138,9 +139,11 @@ Run any shell command after each export (rsync, S3, etc.):
 {
   "sync_enabled": true,
   "sync_method": "command",
-  "sync_command": "rsync -av meetings/ user@server:/backups/granola/"
+  "sync_command": "rsync -av meetings/ user@server:/backups/granola/",
+  "sync_on_no_new": false
 }
 ```
+Set `sync_on_no_new` to `true` if you want the command to run even when no new meetings were exported (e.g., to capture `index.json` updates).
 
 **More examples:**
 

@@ -14,7 +14,6 @@ import re
 import subprocess
 import sys
 from datetime import datetime
-from pathlib import Path
 
 # Paths (automatically use current user's home directory)
 HOME = os.path.expanduser("~")
@@ -101,6 +100,28 @@ def load_config() -> dict:
         return {}
 
 
+def git_has_changes() -> bool:
+    """Check if export directory has uncommitted git changes."""
+    git_dir = os.path.join(EXPORT_DIR, ".git")
+    if not os.path.exists(git_dir):
+        return False
+    result = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=EXPORT_DIR,
+        capture_output=True,
+        text=True
+    )
+    return bool(result.stdout.strip())
+
+
+def remote_matches_repo(repo: str, url: str) -> bool:
+    """Best-effort match of configured repo against git remote url."""
+    if not repo or not url:
+        return False
+    repo = repo[:-4] if repo.endswith(".git") else repo
+    return repo in url
+
+
 def sync_github(config: dict) -> bool:
     """Sync exports to GitHub repository."""
     repo = config.get("github_repo", "")
@@ -117,14 +138,26 @@ def sync_github(config: dict) -> bool:
             log_message("SYNC WARNING: Git not initialized in export dir. Run: cd ~/granola-export && git init && git remote add origin <repo-url>")
             return False
 
+        # Validate remote matches configured repo
+        remote = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            cwd=EXPORT_DIR,
+            capture_output=True,
+            text=True
+        )
+        remote_url = remote.stdout.strip()
+        if remote.returncode != 0 or not remote_matches_repo(repo, remote_url):
+            log_message(f"SYNC WARNING: Git remote 'origin' does not match configured repo ({repo}).")
+            print(f"Sync skipped: git remote 'origin' does not match configured repo ({repo}).")
+            return False
+
         # Copy new meeting files from meetings/ to root (repo stores in root)
         import shutil
         for filename in os.listdir(MEETINGS_DIR):
             if filename.endswith('.json'):
                 src = os.path.join(MEETINGS_DIR, filename)
                 dst = os.path.join(EXPORT_DIR, filename)
-                if not os.path.exists(dst):
-                    shutil.copy2(src, dst)
+                shutil.copy2(src, dst)
 
         # Stage all changes
         subprocess.run(
@@ -217,8 +250,14 @@ def run_sync(new_count: int):
     sync_method = config.get("sync_method", "")
 
     if sync_method == "github":
+        if new_count == 0 and not git_has_changes():
+            log_message("SYNC: Skipped (no new exports)")
+            return
         sync_github(config)
     elif sync_method == "command":
+        if new_count == 0 and not config.get("sync_on_no_new", False):
+            log_message("SYNC: Skipped (no new exports)")
+            return
         sync_command(config)
     else:
         log_message(f"SYNC WARNING: Unknown sync method '{sync_method}'")
@@ -241,11 +280,26 @@ def main():
         print("Error: Could not parse Granola cache file.")
         sys.exit(1)
 
-    inner = json.loads(data.get('cache', '{}'))
+    cache_blob = data.get('cache', {})
+    if isinstance(cache_blob, str):
+        try:
+            inner = json.loads(cache_blob)
+        except json.JSONDecodeError:
+            print("Error: Could not parse Granola cache payload.")
+            sys.exit(1)
+    elif isinstance(cache_blob, dict):
+        inner = cache_blob
+    else:
+        print("Error: Granola cache payload has unexpected type.")
+        sys.exit(1)
     state = inner.get('state', {})
 
     documents = state.get('documents', {})
     transcripts = state.get('transcripts', {})
+
+    if not isinstance(documents, dict) or not isinstance(transcripts, dict):
+        print("Error: Granola cache schema changed (documents/transcripts missing).")
+        sys.exit(1)
 
     print(f"Found {len(documents)} documents and {len(transcripts)} transcripts in cache")
 
