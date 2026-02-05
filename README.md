@@ -1,3 +1,4 @@
+## Granola released their official MCP—you should 100% just use that. This was built prior to that release.
 # Granola Export
 
 Export your [Granola](https://granola.ai) meeting transcripts to local JSON files, optimized for AI querying and search.
